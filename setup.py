@@ -2,12 +2,12 @@ from setuptools import setup, find_packages
 
 setup(
     name="wing",
-    version='0.1.3',
+    version='0.1.4',
     description="Weight Of Evidence transformer",
     long_description='',
     author='Trusov Ivan, Cherepanov Yaroslav',
     author_email="YaACherepanov@sberbank.ru",
-    url='https://stash.ca.sbrf.ru/projects/CARISKVALID/repos/pyilyabinning/browse',
+    url='https://github.com/sberbank-ai/wing',
     license='',
     packages=find_packages(),
     include_package_data=True,

@@ -7,6 +7,8 @@ from sklearn.base import BaseEstimator, TransformerMixin
 from .functions import calc_descriptive_from_vector, split_by_edges, gini_index, calculate_loc_woe
 from .optimizer import WingOptimizer, LIST_OF_ALGOS
 from typing import Tuple, Dict
+from sklearn.preprocessing import OneHotEncoder, LabelEncoder
+from sklearn.tree import DecisionTreeClassifier
 
 
 class WingOfEvidence(BaseEstimator, TransformerMixin):
@@ -194,7 +196,7 @@ class WingOfEvidence(BaseEstimator, TransformerMixin):
             #######################################################
             #  тут рассчитываем для непрерывной переменной
             #######################################################
-            X,y = df["X"].values,df["y"].values
+            X, y = df["X"].values, df["y"].values
             self._print("Starting optimizer search")
             self.optimizer = WingOptimizer(x=X, y=y,
                                            total_good=self.__TOTAL_GOOD, total_bad=self.__TOTAL_BAD,
@@ -215,11 +217,18 @@ class WingOfEvidence(BaseEstimator, TransformerMixin):
             #  тут рассчитываем для дискретной переменной
             #######################################################
             self._print("Inside vector type 'd'")
-            discrete_df = df
-            discrete_df["woe_group"] = discrete_df["X"]
-            self.discrete_df_woe = calc_descriptive_from_vector(discrete_df["woe_group"].values,
-                                                                discrete_df["y"].values,
-                                                                self.__TOTAL_GOOD, self.__TOTAL_BAD)
+
+            self.discrete_label_enc = LabelEncoder()
+            self.discrete_onehot_enc = OneHotEncoder(sparse=False, handle_unknown='error')
+            transformed_X = self.discrete_onehot_enc.fit_transform(
+                self.discrete_label_enc.fit_transform(X).reshape(-1, 1))
+            self.discrete_binner = DecisionTreeClassifier(min_samples_leaf=self.bin_minimal_size,
+                                                          random_state=self.tree_random_state)
+            self.discrete_binner.fit(X=transformed_X, y=y)
+            bins = self.discrete_binner.predict_proba(X=transformed_X)[:, 1]
+
+            self.discrete_df_woe = calc_descriptive_from_vector(bins, y, self.__TOTAL_GOOD, self.__TOTAL_BAD)
+            self.wing_id_dict = self.discrete_df_woe["woe"].to_dict()
             self._print("Discrete woe df created")
             # self.categories = self.discrete_df_woe["woe"].to_dict()
         return self
@@ -232,12 +241,6 @@ class WingOfEvidence(BaseEstimator, TransformerMixin):
         # fill miss
         miss_df = df[pd.isnull(df["X"])].copy()
         miss_df["woe_group"] = "AUTO_MISS"
-        # if miss_df.shape[0] != 0 and (self.miss_woe["woe"] is None):
-        #     if self.vector_type == "c":
-        #         miss_df["woe"] = self.cont_df_woe.loc[self.cont_df_woe.local_event_rate.idxmax()].woe
-        #     else:
-        #         miss_df["woe"] = self.discrete_df_woe.loc[self.discrete_df_woe.local_event_rate.idxmax()].woe
-        # else:
         miss_df["woe"] = self.miss_woe["woe"]
         #######################################################
         # TODO: Расписать что тут происходит
@@ -262,8 +265,10 @@ class WingOfEvidence(BaseEstimator, TransformerMixin):
                 clear_df["woe"] = None
         else:
             if hasattr(self, "discrete_df_woe"):
-                clear_df["woe_group"] = clear_df["X"]
-                clear_df["woe"] = pd.merge(clear_df, self.discrete_df_woe, left_on="woe_group", right_index=True, how="inner")["woe"]
+                transformed_X = self.discrete_onehot_enc.transform(
+                    self.discrete_label_enc.transform(clear_df["X"]).reshape(-1, 1))
+                clear_df["woe_group"] = self.discrete_binner.predict_proba(X=transformed_X)[:, 1]
+                clear_df["woe"] = clear_df["woe_group"].apply(lambda x: self.wing_id_dict[x])
             else:
                 clear_df["woe_group"] = "NO_GROUP"
                 clear_df["woe"] = None
