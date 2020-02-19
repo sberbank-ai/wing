@@ -198,14 +198,14 @@ class WingOfEvidence(BaseEstimator, TransformerMixin):
             #######################################################
             X, y = df["X"].values, df["y"].values
             self._print("Starting optimizer search")
-            self.optimizer = WingOptimizer(x=X, y=y,
+            self.optimizer_obj = WingOptimizer(x=X, y=y,
                                            total_good=self.__TOTAL_GOOD, total_bad=self.__TOTAL_BAD,
                                            n_initial=self.n_initial, n_target=self.n_target,
                                            optimizer=self.optimizer, verbose=self.verbose,
                                            bin_size_increase=self.bin_size_increase,
                                            bin_minimal_size=self.bin_minimal_size, is_monotone=self.is_monotone,
                                            tree_random_state=self.tree_random_state)
-            self.optimal_edges, best_gini = self.optimizer.optimize()
+            self.optimal_edges, best_gini = self.optimizer_obj.optimize()
             self._print("Optimal edges found: %s" % self.optimal_edges)
             self._print("With gini: %0.4f" % best_gini)
             bins = split_by_edges(X,self.optimal_edges)

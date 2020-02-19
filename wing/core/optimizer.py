@@ -133,5 +133,7 @@ class WingOptimizer:
         else:
             raise NotImplementedError("""Optimization algo %s is not implemented. 
             Current implemented algos are: %s""" % (self.optimizer, LIST_OF_ALGOS))
+        self.X = None
+        self.y = None
 
         return optimization_result
