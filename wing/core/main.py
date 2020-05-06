@@ -7,7 +7,7 @@ from sklearn.base import BaseEstimator, TransformerMixin
 from .functions import calc_descriptive_from_vector, split_by_edges, gini_index, calculate_loc_woe
 from .optimizer import WingOptimizer, LIST_OF_ALGOS
 from typing import Tuple, Dict
-from sklearn.preprocessing import OneHotEncoder, LabelEncoder
+from sklearn.preprocessing import OneHotEncoder
 from sklearn.tree import DecisionTreeClassifier
 
 
@@ -16,7 +16,7 @@ class WingOfEvidence(BaseEstimator, TransformerMixin):
     This class creates realization of WoE for one variable
     """
     def __init__(self, variable_name=None, vector_type="c", bin_minimal_size=.05, is_monotone=False,
-                 bin_size_increase=.05, optimizer="ilya-binning", spec_values=None, n_initial=10, n_target=5,
+                 bin_size_increase=.05, optimizer="tree-binning", spec_values=None, n_initial=10, n_target=5,
                  tree_random_state=None, verbose=False):
         """
         One feature wing.
@@ -217,11 +217,9 @@ class WingOfEvidence(BaseEstimator, TransformerMixin):
             #  тут рассчитываем для дискретной переменной
             #######################################################
             self._print("Inside vector type 'd'")
-
-            self.discrete_label_enc = LabelEncoder()
+            X, y = df["X"].values, df["y"].values.astype(int)
             self.discrete_onehot_enc = OneHotEncoder(sparse=False, handle_unknown='error')
-            transformed_X = self.discrete_onehot_enc.fit_transform(
-                self.discrete_label_enc.fit_transform(X).reshape(-1, 1))
+            transformed_X = self.discrete_onehot_enc.fit_transform(X.reshape(-1, 1))
             self.discrete_binner = DecisionTreeClassifier(min_samples_leaf=self.bin_minimal_size,
                                                           random_state=self.tree_random_state)
             self.discrete_binner.fit(X=transformed_X, y=y)
@@ -229,6 +227,8 @@ class WingOfEvidence(BaseEstimator, TransformerMixin):
 
             self.discrete_df_woe = calc_descriptive_from_vector(bins, y, self.__TOTAL_GOOD, self.__TOTAL_BAD)
             self.wing_id_dict = self.discrete_df_woe["woe"].to_dict()
+            woed_X = pd.Series(bins).replace(self.wing_id_dict).values
+            self.categories_woes = pd.DataFrame({"X": X, "woe_group": bins, "woe": woed_X}).groupby("X").first().reset_index()
             self._print("Discrete woe df created")
             # self.categories = self.discrete_df_woe["woe"].to_dict()
         return self
@@ -238,10 +238,14 @@ class WingOfEvidence(BaseEstimator, TransformerMixin):
             # bugfix for compatability
             y = pd.Series([1 for i in range(len(X))])
         df = self._check_data(X, y)
+        worst_woe_val = self._select_worst_woe()
         # fill miss
         miss_df = df[pd.isnull(df["X"])].copy()
         miss_df["woe_group"] = "AUTO_MISS"
-        miss_df["woe"] = self.miss_woe["woe"]
+        if self.miss_woe["woe"] is not None:
+            miss_df["woe"] = self.miss_woe["woe"]
+        else:
+            miss_df["woe"] = worst_woe_val
         #######################################################
         # TODO: Расписать что тут происходит
         #######################################################
@@ -265,10 +269,9 @@ class WingOfEvidence(BaseEstimator, TransformerMixin):
                 clear_df["woe"] = None
         else:
             if hasattr(self, "discrete_df_woe"):
-                transformed_X = self.discrete_onehot_enc.transform(
-                    self.discrete_label_enc.transform(clear_df["X"]).reshape(-1, 1))
-                clear_df["woe_group"] = self.discrete_binner.predict_proba(X=transformed_X)[:, 1]
-                clear_df["woe"] = clear_df["woe_group"].apply(lambda x: self.wing_id_dict[x])
+                orig_index = clear_df.index
+                clear_df = clear_df.merge(self.categories_woes, how="left", on="X")
+                clear_df.index = orig_index
             else:
                 clear_df["woe_group"] = "NO_GROUP"
                 clear_df["woe"] = None
@@ -278,20 +281,7 @@ class WingOfEvidence(BaseEstimator, TransformerMixin):
         full_transform = pd.concat([miss_df, spec_df, clear_df], axis=0)  # ["woe"]
         #######################################################
         # TODO: Расписать что тут происходит + алго выбора
-        #######################################################
-        miss_wing_selector = [self.miss_woe["woe"]]
-        spec_wing_selector = [sub_d.get("woe") for sub_d in self.spec_values_woe.values()]
-        if self.vector_type == "c":
-            if hasattr(self, "wing_id_dict"):
-                grpd_wing_selector = list(self.wing_id_dict.values())
-            else:
-                grpd_wing_selector = [None]
-        else:
-            grpd_wing_selector = list(self.discrete_df_woe["woe"].values)
-        allv_wing_selector = miss_wing_selector+spec_wing_selector+grpd_wing_selector
-        allv_wing_selector_flt = [v for v in allv_wing_selector if v is not None]
-        max_woe_replacer = np.min(allv_wing_selector_flt)
-        full_transform["woe"] = full_transform["woe"].fillna(max_woe_replacer)
+        full_transform["woe"] = full_transform["woe"].fillna(worst_woe_val)
         full_transform = full_transform.sort_index()
         return full_transform
 
@@ -333,6 +323,21 @@ class WingOfEvidence(BaseEstimator, TransformerMixin):
         woe_df = woe_df.sort_values(by="local_event_rate", ascending=False)
         gini_index_value = gini_index(woe_df["good"].values, woe_df["bad"].values)
         return gini_index_value
+
+    def _select_worst_woe(self):
+        miss_wing_selector = [self.miss_woe["woe"]]
+        spec_wing_selector = [sub_d.get("woe") for sub_d in self.spec_values_woe.values()]
+        if self.vector_type == "c":
+            if hasattr(self, "wing_id_dict"):
+                grpd_wing_selector = list(self.wing_id_dict.values())
+            else:
+                grpd_wing_selector = [None]
+        else:
+            grpd_wing_selector = list(self.discrete_df_woe["woe"].values)
+        allv_wing_selector = miss_wing_selector+spec_wing_selector+grpd_wing_selector
+        allv_wing_selector_flt = [v for v in allv_wing_selector if v is not None]
+        max_woe_replacer = np.min(allv_wing_selector_flt)
+        return max_woe_replacer
 
     def _check_params(self):
         """
@@ -390,7 +395,7 @@ class WingsOfEvidence(BaseEstimator, TransformerMixin):
     def __init__(self, bin_minimal_size=.05, is_monotone=False,
                  bin_size_increase=.05, columns_to_apply="all",
                  n_initial=10, n_target=5, mass_spec_values={},
-                 optimizer="ilya-binning", only_values=True,
+                 optimizer="tree-binning", only_values=True,
                  tree_random_state=None, verbose=False):
         """
         Этот класс реализует расчет WoE по многим переменным

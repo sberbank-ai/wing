@@ -153,7 +153,7 @@ def gini_index(events: np.ndarray, non_events: np.ndarray) -> np.float:
     # calculate coefficient
     coefficient = 1 - ((p1 + p2) / p3)
     index = coefficient * 100
-    assert 0 < index < 100
+    assert 0 <= index < 100
     return index
 
 

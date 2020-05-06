@@ -6,12 +6,12 @@ import pandas as pd
 from typing import Tuple
 from sklearn.tree import DecisionTreeClassifier, _tree
 
-LIST_OF_ALGOS = ['full-search', 'ilya-binning']
+LIST_OF_ALGOS = ['full-search', 'tree-binning']
 
 
 class WingOptimizer:
     def __init__(self, x: np.ndarray, y: np.ndarray, total_good: int, total_bad: int, n_initial: int, n_target: int,
-                 bin_minimal_size: float, bin_size_increase: float, is_monotone: bool, optimizer="ilya-binning",
+                 bin_minimal_size: float, bin_size_increase: float, is_monotone: bool, optimizer="tree-binning",
                  tree_random_state=None, verbose=False):
         """
         :param x
@@ -103,8 +103,8 @@ class WingOptimizer:
                     mono_variants.append((edge_variant, gini))
             self._print("Total mono variants: %i" % len(mono_variants))
             optimization_result = sorted(mono_variants, key=lambda x: x[1])[-1]
-        elif self.optimizer == "ilya-binning":
-            self._print("Doing ilya-binning")
+        elif self.optimizer == "tree-binning":
+            self._print("Doing tree-binning")
             monotonicity_flag = False
             bin_count = 1000
             curr_min_bin = self.bin_minimal_size

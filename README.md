@@ -12,7 +12,7 @@ python setup.py install
 ```python
 
 import pandas as pd
-from wingilya import WingsOfEvidence
+from wing import WingsOfEvidence
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
 from sklearn.datasets import make_classification
@@ -27,8 +27,8 @@ column_names = ['X%i'%i for i in range(10)]
 D_train = pd.DataFrame(X_train,columns = column_names)
 D_test = pd.DataFrame(X_test,columns = column_names)
 
-# Для высокой скорости используйте optimizer='ilya-binning', для высокого качества используйте optimizer='full-search'
-# Параметры, которые оказывают влияние на биннинг при optimizer='ilya-binning' обозначены ниже
+# Для высокой скорости используйте optimizer='tree-binning', для высокого качества используйте optimizer='full-search'
+# Параметры, которые оказывают влияние на биннинг при optimizer='tree-binning' обозначены ниже
 # Все остальные параметры используются при optimizer='full-search'
 wing = WingsOfEvidence(bin_minimal_size=0.05, bin_size_increase=0.05, is_monotone=False)
 log = LogisticRegression()

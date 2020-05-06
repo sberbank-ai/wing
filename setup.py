@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="wing",
-    version='0.1.5',
+    version='0.1.6',
     description="Weight Of Evidence transformer",
     long_description='',
     author='Trusov Ivan, Cherepanov Yaroslav',
